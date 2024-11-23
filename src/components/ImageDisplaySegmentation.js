@@ -23,7 +23,7 @@ const ImageDisplaySegmentation = ({
     handleMouseMove,
     handleMouseUp,
     calculateDisplayParams,
-  } = useImageDisplay(image.url);
+  } = useImageDisplay(image.image);
 
   const [points, setPoints] = useState([]);
   const [mask, setMask] = useState(previousMask || null);
@@ -279,7 +279,7 @@ const ImageDisplaySegmentation = ({
       >
         <img
           ref={imageRef}
-          src={image.url}
+          src={image.image}
           alt="Segmentation"
           onLoad={calculateDisplayParams}
           style={{

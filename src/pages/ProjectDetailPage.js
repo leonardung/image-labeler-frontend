@@ -13,7 +13,6 @@ import { AuthContext } from "../AuthContext";
 
 function ProjectDetailPage() {
     const { projectId } = useParams();
-    { console.log(projectId) }
     const navigate = useNavigate();
     const { logoutUser } = useContext(AuthContext);
 
@@ -39,7 +38,6 @@ function ProjectDetailPage() {
                 const response = await axiosInstance.get(`projects/${projectId}/`);
                 setProject(response.data);
                 setModelType(response.data.type); // Set modelType based on project type
-                // Fetch images for the project
                 setImages(response.data.images);
             } catch (error) {
                 console.error("Error fetching project details:", error);
@@ -48,14 +46,15 @@ function ProjectDetailPage() {
                     message: "Error fetching project details.",
                     severity: "error",
                 });
-                // Optionally, navigate back to projects page
-                // navigate('/');
             }
         };
 
         fetchProject();
     }, [projectId]);
 
+    useEffect(() => {
+        console.log('Updated images:', images);
+      }, [images]);
     // Handle keyboard navigation
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -88,7 +87,7 @@ function ProjectDetailPage() {
             setCoordinates({});
 
             // Batch upload files
-            const batchSize = 10; // Adjust based on your needs and server capacity
+            const batchSize = 50; // Adjust based on your needs and server capacity
             setLoading(true);
             for (let i = 0; i < imageFiles.length; i += batchSize) {
                 const batchFiles = imageFiles.slice(i, i + batchSize);

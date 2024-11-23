@@ -24,7 +24,7 @@ const ImageDisplayCoordinate = ({
     handleMouseMove,
     handleMouseUp,
     calculateDisplayParams,
-  } = useImageDisplay(image.url);
+  } = useImageDisplay(image.image);
   // Handle image click to record coordinates
   const handleImageClick = (event) => {
     // Prevent click handling when panning or Shift key is pressed
@@ -127,7 +127,7 @@ const ImageDisplayCoordinate = ({
       >
         <img
           ref={imageRef}
-          src={image.url}
+          src={image.image}
           alt="Label"
           onLoad={calculateDisplayParams}
           style={{

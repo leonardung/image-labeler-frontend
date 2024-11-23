@@ -50,7 +50,7 @@ function ThumbnailGrid({ images, onThumbnailClick, currentIndex, coordinates, fi
         }}
       >
         <img
-          src={image.thumbnailUrl || image.url}
+          src={image.thumbnailUrl || image.image}
           alt={`Thumbnail ${index}`}
           loading="lazy"
           style={{
