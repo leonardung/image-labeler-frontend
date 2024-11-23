@@ -58,13 +58,12 @@ const ImageDisplayCoordinate = ({
 
   // Calculate crosshair position based on coordinates
   const getCrosshairPosition = () => {
+    console.log("coordinates", coordinates)
     if (!coordinates[image.id]) {
       return { top: 0, left: 0 };
     }
-    
-    const x = coordinates[image.id].x * zoomLevel + panOffset.x;
-    const y = coordinates[image.id].y * zoomLevel + panOffset.y;
-
+    const x = coordinates[image.id][0].x * zoomLevel + panOffset.x;
+    const y = coordinates[image.id][0].y * zoomLevel + panOffset.y;
 
     return {
       top: y,

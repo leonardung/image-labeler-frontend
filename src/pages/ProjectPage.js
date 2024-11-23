@@ -18,6 +18,7 @@ const ProjectPage = () => {
     const navigate = useNavigate();
     const projectTypes = [
         { value: 'point_coordinate', label: 'Point Coordinate' },
+        { value: 'multi_point_coordinate', label: 'Multi Point Coordinate' },
         { value: 'bounding_box', label: 'Bounding Box' },
         { value: 'segmentation', label: 'Segmentation' },
     ];

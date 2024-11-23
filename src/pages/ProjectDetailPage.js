@@ -19,8 +19,8 @@ function ProjectDetailPage() {
     const [project, setProject] = useState(null);
     const [modelType, setModelType] = useState("segmentation"); // Default type
     const [images, setImages] = useState([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
     const [coordinates, setCoordinates] = useState({});
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [files, setFiles] = useState([]);
     const [progress, setProgress] = useState(0);
     const [masks, setMasks] = useState({});
@@ -31,14 +31,26 @@ function ProjectDetailPage() {
         severity: "info",
     });
 
-    // Fetch project details on mount
     useEffect(() => {
         const fetchProject = async () => {
             try {
                 const response = await axiosInstance.get(`projects/${projectId}/`);
-                setProject(response.data);
-                setModelType(response.data.type); // Set modelType based on project type
-                setImages(response.data.images);
+
+                const coordinatesMap = {};
+                response.data.images.forEach((image) => {
+                    if (image.coordinates && image.coordinates.length > 0) {
+                        coordinatesMap[image.id] = image.coordinates.map((coord) => ({
+                            x: coord.x,
+                            y: coord.y,
+                        }));
+                    }
+                });
+
+                setCoordinates(coordinatesMap); // Update the coordinates state
+
+                setProject(response.data); // Store the full project data
+                setModelType(response.data.type); // Set model type
+                setImages(response.data.images); // Store images
             } catch (error) {
                 console.error("Error fetching project details:", error);
                 setNotification({
@@ -52,9 +64,9 @@ function ProjectDetailPage() {
         fetchProject();
     }, [projectId]);
 
+
     useEffect(() => {
-        console.log('Updated images:', images);
-      }, [images]);
+    }, [images]);
     // Handle keyboard navigation
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -146,10 +158,13 @@ function ProjectDetailPage() {
 
     // Function to save coordinates to backend
     const saveCoordinatesToBackend = async () => {
-        const imageId = images[currentIndex].id;
-        const coords = coordinates[imageId];
+        { console.log(coordinates) }
+        const payload = Object.entries(coordinates).map(([imageId, coords]) => ({
+            image_id: parseInt(imageId, 10),
+            coordinates: coords.map(coord => ({ x: coord.x, y: coord.y })),
+        }));
 
-        if (!coords) {
+        if (!coordinates) {
             setNotification({
                 open: true,
                 message: "No coordinates to save.",
@@ -157,11 +172,10 @@ function ProjectDetailPage() {
             });
             return;
         }
-
         try {
             await axiosInstance.post(
-                `images/${imageId}/save_coordinates/`,
-                { x: coords.x, y: coords.y },
+                `images/save_all_coordinates/`,
+                payload,
                 {
                     headers: {
                         "Content-Type": "application/json",
@@ -223,7 +237,6 @@ function ProjectDetailPage() {
         });
     };
 
-    // Function to reload labels from the database
     const handleReloadFromDatabase = async () => {
         try {
             const response = await axiosInstance.get(
@@ -231,8 +244,13 @@ function ProjectDetailPage() {
             );
             if (response.data) {
                 const newCoordinates = {};
-                response.data.forEach((coord) => {
-                    newCoordinates[coord.image_id] = { x: coord.x, y: coord.y };
+                response.data.forEach((entry) => {
+                    if (entry.image_id && entry.coordinates) {
+                        newCoordinates[entry.image_id] = entry.coordinates.map(coord => ({
+                            x: coord.x,
+                            y: coord.y,
+                        }));
+                    }
                 });
                 setCoordinates(newCoordinates);
                 setNotification({
@@ -333,15 +351,17 @@ function ProjectDetailPage() {
                                                 }));
                                             }}
                                         />
-                                    ) : modelType === "point_coordinate" ? (
+                                    ) : modelType === "point_coordinate" || modelType === "multi_point_coordinate" ? (
                                         <ImageDisplayCoordinate
                                             image={images[currentIndex]}
-                                            coordinates={coordinates}
+                                            coordinates={coordinates || {}}
                                             onCoordinatesChange={(newCoordinates) =>
-                                                setCoordinates((prev) => ({
-                                                    ...prev,
-                                                    [images[currentIndex].id]: newCoordinates,
-                                                }))
+                                                setCoordinates(
+                                                    (prev) => ({
+                                                        ...prev,
+                                                        [images[currentIndex].id]: [newCoordinates],
+                                                    })
+                                                )
                                             }
                                         />
                                     ) : (
@@ -359,8 +379,8 @@ function ProjectDetailPage() {
                                         {coordinates[images[currentIndex].id] ? (
                                             <>
                                                 x:{" "}
-                                                {coordinates[images[currentIndex].id].x.toFixed(0)} | y:{" "}
-                                                {coordinates[images[currentIndex].id].y.toFixed(0)}
+                                                {coordinates[images[currentIndex].id][0].x.toFixed(0)} | y:{" "}
+                                                {coordinates[images[currentIndex].id][0].y.toFixed(0)}
                                             </>
                                         ) : (
                                             "No coordinates available"
