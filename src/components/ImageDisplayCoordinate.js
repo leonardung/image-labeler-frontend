@@ -5,8 +5,8 @@ import { Checkbox, FormControlLabel, Box, Typography } from "@mui/material";
 
 const ImageDisplayCoordinate = ({
   image,
-  fileId,
   coordinates,
+  modelType,
   onCoordinatesChange,
 }) => {
   const {
@@ -25,9 +25,8 @@ const ImageDisplayCoordinate = ({
     handleMouseUp,
     calculateDisplayParams,
   } = useImageDisplay(image.image);
-  // Handle image click to record coordinates
+
   const handleImageClick = (event) => {
-    // Prevent click handling when panning or Shift key is pressed
     if (isPanning || ShiftKeyPress) return;
 
     if (!containerRef.current || !imageRef.current) {
@@ -40,11 +39,9 @@ const ImageDisplayCoordinate = ({
     const clickX = event.clientX - containerRect.left;
     const clickY = event.clientY - containerRect.top;
 
-    // Convert click position to image coordinates
     const imgX = (clickX - panOffset.x) / zoomLevel;
     const imgY = (clickY - panOffset.y) / zoomLevel;
 
-    // Check if click is within the image bounds
     if (
       imgX < 0 ||
       imgX > imgDimensions.width ||
@@ -53,25 +50,27 @@ const ImageDisplayCoordinate = ({
     ) {
       return;
     }
-    onCoordinatesChange({ x: imgX, y: imgY })
+
+    // Pass only the new coordinate
+    onCoordinatesChange({ x: imgX, y: imgY });
   };
 
-  // Calculate crosshair position based on coordinates
-  const getCrosshairPosition = () => {
-    console.log("coordinates", coordinates)
+  const getCrosshairPositions = () => {
     if (!coordinates[image.id]) {
-      return { top: 0, left: 0 };
+      return [];
     }
-    const x = coordinates[image.id][0].x * zoomLevel + panOffset.x;
-    const y = coordinates[image.id][0].y * zoomLevel + panOffset.y;
 
-    return {
-      top: y,
-      left: x,
-    };
+    return coordinates[image.id].map((coord) => {
+      const x = coord.x * zoomLevel + panOffset.x;
+      const y = coord.y * zoomLevel + panOffset.y;
+      return { top: y, left: x };
+    });
   };
 
-  const crosshairPosition = getCrosshairPosition();
+  const crosshairPositions =
+    modelType === "multi_point_coordinate"
+      ? getCrosshairPositions()
+      : getCrosshairPositions().slice(0, 1);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -142,39 +141,41 @@ const ImageDisplayCoordinate = ({
           }}
         />
 
-        {/* Display crosshairs at the labeled coordinate if available */}
-        {coordinates[image.id] && (
-          <div
-            style={{
-              position: "absolute",
-              pointerEvents: "none",
-              top: `${crosshairPosition.top}px`,
-              left: `${crosshairPosition.left}px`,
-              transform: "translate(-50%, -50%)",
-            }}
-          >
-            {/* Horizontal part of the crosshair */}
+        {/* Display crosshairs at the labeled coordinates if available */}
+        {coordinates[image.id] &&
+          crosshairPositions.map((position, index) => (
             <div
+              key={index}
               style={{
                 position: "absolute",
-                width: "20px",
-                height: "2px",
-                backgroundColor: "red",
-                transform: "translate(-50%, -50%) rotate(0deg)",
+                pointerEvents: "none",
+                top: `${position.top}px`,
+                left: `${position.left}px`,
+                transform: "translate(-50%, -50%)",
               }}
-            ></div>
-            {/* Vertical part of the crosshair */}
-            <div
-              style={{
-                position: "absolute",
-                width: "20px",
-                height: "2px",
-                backgroundColor: "red",
-                transform: "translate(-50%, -50%) rotate(90deg)",
-              }}
-            ></div>
-          </div>
-        )}
+            >
+              {/* Horizontal part of the crosshair */}
+              <div
+                style={{
+                  position: "absolute",
+                  width: "20px",
+                  height: "2px",
+                  backgroundColor: "red",
+                  transform: "translate(-50%, -50%) rotate(0deg)",
+                }}
+              ></div>
+              {/* Vertical part of the crosshair */}
+              <div
+                style={{
+                  position: "absolute",
+                  width: "20px",
+                  height: "2px",
+                  backgroundColor: "red",
+                  transform: "translate(-50%, -50%) rotate(90deg)",
+                }}
+              ></div>
+            </div>
+          ))}
       </div>
     </div>
   );

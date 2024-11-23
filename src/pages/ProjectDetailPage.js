@@ -46,11 +46,10 @@ function ProjectDetailPage() {
                     }
                 });
 
-                setCoordinates(coordinatesMap); // Update the coordinates state
-
-                setProject(response.data); // Store the full project data
-                setModelType(response.data.type); // Set model type
-                setImages(response.data.images); // Store images
+                setCoordinates(coordinatesMap);
+                setProject(response.data);
+                setModelType(response.data.type);
+                setImages(response.data.images);
             } catch (error) {
                 console.error("Error fetching project details:", error);
                 setNotification({
@@ -274,14 +273,31 @@ function ProjectDetailPage() {
         setNotification((prev) => ({ ...prev, open: false }));
     };
 
+    const handleCoordinatesChange = (newCoordinate) => {
+        setCoordinates((prev) => {
+            const prevCoords = prev[images[currentIndex].id] || [];
+            if (modelType === "multi_point_coordinate") {
+                // Append the new coordinate
+                return {
+                    ...prev,
+                    [images[currentIndex].id]: [...prevCoords, newCoordinate],
+                };
+            } else {
+                // Replace with the new coordinate
+                return {
+                    ...prev,
+                    [images[currentIndex].id]: [newCoordinate],
+                };
+            }
+        });
+    };
+
     return (
         <Box
             sx={{
                 height: "100vh",
                 display: "flex",
                 flexDirection: "column",
-                background:
-                    "linear-gradient(135deg, rgb(220,220,255) 0%, rgb(210,210,255) 100%)",
                 color: "white",
             }}
         >
@@ -290,7 +306,7 @@ function ProjectDetailPage() {
                 <Button variant="contained" color="primary" onClick={handleSelectFolder}>
                     Upload Images
                 </Button>
-                <Typography variant="h6" sx={{ ml: 2 }}>
+                <Typography variant="h4" color="primary" fontWeight="bold" sx={{ ml: 4 }}>
                     {project ? project.name : "Loading Project..."}
                 </Typography>
                 <Button
@@ -351,25 +367,16 @@ function ProjectDetailPage() {
                                                 }));
                                             }}
                                         />
-                                    ) : modelType === "point_coordinate" || modelType === "multi_point_coordinate" ? (
+                                    ) : (
                                         <ImageDisplayCoordinate
                                             image={images[currentIndex]}
                                             coordinates={coordinates || {}}
-                                            onCoordinatesChange={(newCoordinates) =>
-                                                setCoordinates(
-                                                    (prev) => ({
-                                                        ...prev,
-                                                        [images[currentIndex].id]: [newCoordinates],
-                                                    })
-                                                )
-                                            }
+                                            modelType={modelType}
+                                            onCoordinatesChange={handleCoordinatesChange}
                                         />
-                                    ) : (
-                                        <Typography variant="body1" color="textSecondary">
-                                            Unsupported model type: {modelType}
-                                        </Typography>
                                     )}
                                 </Box>
+
                                 <Box mr={1}>
                                     <Typography
                                         variant="body1"
@@ -379,8 +386,8 @@ function ProjectDetailPage() {
                                         {coordinates[images[currentIndex].id] ? (
                                             <>
                                                 x:{" "}
-                                                {coordinates[images[currentIndex].id][0].x.toFixed(0)} | y:{" "}
-                                                {coordinates[images[currentIndex].id][0].y.toFixed(0)}
+                                                {/* {coordinates[images[currentIndex].id][0].x.toFixed(0)} | y:{" "}
+                                                {coordinates[images[currentIndex].id][0].y.toFixed(0)} */}
                                             </>
                                         ) : (
                                             "No coordinates available"
