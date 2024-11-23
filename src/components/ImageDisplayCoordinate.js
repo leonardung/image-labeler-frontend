@@ -1,7 +1,7 @@
 // ImageDisplayCoordinate.js
-import React from "react";
+import React, { useState } from "react";
 import useImageDisplay from "./useImageDisplay";
-import { Checkbox, FormControlLabel, Box, Typography } from "@mui/material";
+import CrosshairControls from "./CrosshairControls";
 
 const ImageDisplayCoordinate = ({
   image,
@@ -25,6 +25,12 @@ const ImageDisplayCoordinate = ({
     handleMouseUp,
     calculateDisplayParams,
   } = useImageDisplay(image.image);
+
+  // State variables for crosshair properties
+  const [crosshairWidth, setCrosshairWidth] = useState(2); // Default width
+  const [crosshairLength, setCrosshairLength] = useState(20); // Default length
+  const [crosshairColor, setCrosshairColor] = useState("#ff0000"); // Default color (red)
+  const [crosshairShape, setCrosshairShape] = useState("+"); // Default shape
 
   const handleImageClick = (event) => {
     if (isPanning || ShiftKeyPress) return;
@@ -72,36 +78,164 @@ const ImageDisplayCoordinate = ({
       ? getCrosshairPositions()
       : getCrosshairPositions().slice(0, 1);
 
+  const renderCrosshairShape = (position, index) => {
+    const commonStyle = {
+      position: "absolute",
+      pointerEvents: "none",
+      top: `${position.top}px`,
+      left: `${position.left}px`,
+      transform: "translate(-50%, -50%)",
+    };
+
+    switch (crosshairShape) {
+      case "+":
+        return (
+          <div key={index} style={commonStyle}>
+            {/* Horizontal line */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+                transform: "translate(-50%, -50%)",
+              }}
+            />
+            {/* Vertical line */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairWidth}px`,
+                height: `${crosshairLength}px`,
+                backgroundColor: crosshairColor,
+                transform: "translate(-50%, -50%)",
+              }}
+            />
+          </div>
+        );
+      case "x":
+        return (
+          <div key={index} style={commonStyle}>
+            {/* Diagonal line 1 */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+                transform: `translate(-50%, -50%) rotate(45deg)`,
+              }}
+            />
+            {/* Diagonal line 2 */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+                transform: `translate(-50%, -50%) rotate(-45deg)`,
+              }}
+            />
+          </div>
+        );
+      case "full_circle":
+        return (
+          <div
+            key={index}
+            style={{
+              ...commonStyle,
+              width: `${crosshairLength}px`,
+              height: `${crosshairLength}px`,
+              borderRadius: "50%",
+              backgroundColor: crosshairColor,
+            }}
+          />
+        );
+      case "empty_circle":
+        return (
+          <div
+            key={index}
+            style={{
+              ...commonStyle,
+              width: `${crosshairLength}px`,
+              height: `${crosshairLength}px`,
+              borderRadius: "50%",
+              border: `${crosshairWidth}px solid ${crosshairColor}`,
+              backgroundColor: "transparent",
+            }}
+          />
+        );
+      case "star":
+        return (
+          <div key={index} style={commonStyle}>
+            {/* Vertical line */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairWidth}px`,
+                height: `${crosshairLength}px`,
+                backgroundColor: crosshairColor,
+              }}
+            />
+            {/* Horizontal line */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+              }}
+            />
+            {/* Diagonal line 1 */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+                transform: `rotate(45deg)`,
+              }}
+            />
+            {/* Diagonal line 2 */}
+            <div
+              style={{
+                position: "absolute",
+                width: `${crosshairLength}px`,
+                height: `${crosshairWidth}px`,
+                backgroundColor: crosshairColor,
+                transform: `rotate(-45deg)`,
+              }}
+            />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Toggle for keeping zoom and pan */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 10,
-          left: 10,
-          zIndex: 1,
-          backgroundColor: "rgba(250,250,250, 0.4)", // half-transparent gray
-          paddingLeft: 1,
-          borderRadius: 1,
-          color: "black",
-        }}
-      >
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={keepZoomPan}
-              onChange={handleToggleChange}
-              color="primary"
-            />
-          }
-          label={
-            <Typography sx={{ fontWeight: "bold" }}>
-              Keep Zoom and Pan
-            </Typography>
-          }
-        />
-      </Box>
+      {/* Crosshair Controls Component */}
+      <CrosshairControls
+        keepZoomPan={keepZoomPan}
+        onToggleKeepZoomPan={handleToggleChange}
+        crosshairWidth={crosshairWidth}
+        onCrosshairWidthChange={(event, newValue) =>
+          setCrosshairWidth(newValue)
+        }
+        crosshairLength={crosshairLength}
+        onCrosshairLengthChange={(event, newValue) =>
+          setCrosshairLength(newValue)
+        }
+        crosshairColor={crosshairColor}
+        onCrosshairColorChange={(event) =>
+          setCrosshairColor(event.target.value)
+        }
+        crosshairShape={crosshairShape}
+        onCrosshairShapeChange={(event) =>
+          setCrosshairShape(event.target.value)
+        }
+      />
 
       <div
         ref={containerRef}
@@ -137,45 +271,15 @@ const ImageDisplayCoordinate = ({
             transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
             transformOrigin: "0 0",
             userSelect: "none",
-            pointerEvents: "none", // Ensure mouse events pass through the image
+            pointerEvents: "none",
           }}
         />
 
         {/* Display crosshairs at the labeled coordinates if available */}
         {coordinates[image.id] &&
-          crosshairPositions.map((position, index) => (
-            <div
-              key={index}
-              style={{
-                position: "absolute",
-                pointerEvents: "none",
-                top: `${position.top}px`,
-                left: `${position.left}px`,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              {/* Horizontal part of the crosshair */}
-              <div
-                style={{
-                  position: "absolute",
-                  width: "20px",
-                  height: "2px",
-                  backgroundColor: "red",
-                  transform: "translate(-50%, -50%) rotate(0deg)",
-                }}
-              ></div>
-              {/* Vertical part of the crosshair */}
-              <div
-                style={{
-                  position: "absolute",
-                  width: "20px",
-                  height: "2px",
-                  backgroundColor: "red",
-                  transform: "translate(-50%, -50%) rotate(90deg)",
-                }}
-              ></div>
-            </div>
-          ))}
+          crosshairPositions.map((position, index) =>
+            renderCrosshairShape(position, index)
+          )}
       </div>
     </div>
   );
