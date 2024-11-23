@@ -144,7 +144,6 @@ const ImageDisplayCoordinate = ({
         />
 
         {/* Display crosshairs at the labeled coordinate if available */}
-        {console.log(coordinates)}
         {coordinates[image.id] && (
           <div
             style={{

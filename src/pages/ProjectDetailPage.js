@@ -1,66 +1,131 @@
-import React, { useState, useEffect, useContext } from 'react';
-import axiosInstance from '../axiosInstance';
-import {
-    Button,
-    Typography,
-    Box,
-    CssBaseline,
-    Snackbar,
-    Alert,
-    LinearProgress,
-} from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../AuthContext';
+import React, { useState, useEffect, useContext } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import axiosInstance from "../axiosInstance";
+import { Button, Typography, Box, CssBaseline, Snackbar, Alert, LinearProgress } from "@mui/material";
 
-// Import or create these components based on your original code
-import ImageDisplayCoordinate from '../components/ImageDisplayCoordinate';
-import ImageDisplaySegmentation from '../components/ImageDisplaySegmentation';
-import NavigationButtons from '../components/NavigationButtons';
-import Controls from '../components/Controls';
-import ProgressBar from '../components/ProgressBar';
-import ThumbnailGrid from '../components/ThumbnailGrid';
+import ImageDisplayCoordinate from "../components/ImageDisplayCoordinate";
+import ImageDisplaySegmentation from "../components/ImageDisplaySegmentation";
+import NavigationButtons from "../components/NavigationButtons";
+import Controls from "../components/Controls";
+import ProgressBar from "../components/ProgressBar";
+import ThumbnailGrid from "../components/ThumbnailGrid";
+import { AuthContext } from "../AuthContext";
 
-const ProjectDetailPage = () => {
-    const { id } = useParams(); // Get project ID from URL parameters
-    const { authTokens } = useContext(AuthContext);
+function ProjectDetailPage() {
+    const { projectId } = useParams();
+    { console.log(projectId) }
+    const navigate = useNavigate();
+    const { logoutUser } = useContext(AuthContext);
+
     const [project, setProject] = useState(null);
+    const [modelType, setModelType] = useState("segmentation"); // Default type
     const [images, setImages] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [coordinates, setCoordinates] = useState({});
-    const { logoutUser } = useContext(AuthContext);
-    const navigate = useNavigate();
+    const [files, setFiles] = useState([]);
     const [progress, setProgress] = useState(0);
-    const [modelType, setModelType] = useState('segmentation');
     const [masks, setMasks] = useState({});
     const [loading, setLoading] = useState(false);
     const [notification, setNotification] = useState({
         open: false,
-        message: '',
-        severity: 'info',
+        message: "",
+        severity: "info",
     });
 
+    // Fetch project details on mount
     useEffect(() => {
-        fetchProjectDetails();
-    }, [id]);
+        const fetchProject = async () => {
+            try {
+                const response = await axiosInstance.get(`projects/${projectId}/`);
+                setProject(response.data);
+                setModelType(response.data.type); // Set modelType based on project type
+                // Fetch images for the project
+                setImages(response.data.images);
+            } catch (error) {
+                console.error("Error fetching project details:", error);
+                setNotification({
+                    open: true,
+                    message: "Error fetching project details.",
+                    severity: "error",
+                });
+                // Optionally, navigate back to projects page
+                // navigate('/');
+            }
+        };
 
-    const handleLogout = () => {
-        logoutUser();
-        navigate('/login');
-    };
+        fetchProject();
+    }, [projectId]);
 
-    const fetchProjectDetails = async () => {
-        try {
-            const response = await axiosInstance.get(`projects/${id}/`);
-            setProject(response.data);
-            setImages(response.data.images);
-        } catch (error) {
-            console.error('Error fetching project details:', error);
-            setNotification({
-                open: true,
-                message: 'Error fetching project details.',
-                severity: 'error',
-            });
-        }
+    // Handle keyboard navigation
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === "a") {
+                handlePrevImage();
+            } else if (event.key === "d") {
+                handleNextImage();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [currentIndex, images]);
+
+    // Function to select and upload images
+    const handleSelectFolder = async () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.multiple = true;
+        input.accept = "image/*";
+        input.onchange = async (event) => {
+            const selectedFiles = Array.from(event.target.files);
+            const imageFiles = selectedFiles.filter((file) =>
+                file.type.startsWith("image/")
+            );
+            setFiles(imageFiles);
+            setCurrentIndex(0);
+            setCoordinates({});
+
+            // Batch upload files
+            const batchSize = 10; // Adjust based on your needs and server capacity
+            setLoading(true);
+            for (let i = 0; i < imageFiles.length; i += batchSize) {
+                const batchFiles = imageFiles.slice(i, i + batchSize);
+
+                // Create FormData for the batch
+                const formData = new FormData();
+                formData.append("project_id", projectId);
+                batchFiles.forEach((file) => {
+                    formData.append("images", file);
+                });
+
+                // Upload the batch
+                try {
+                    const response = await axiosInstance.post(
+                        `images/`,
+                        formData,
+                        {
+                            headers: {
+                                "Content-Type": "multipart/form-data",
+                            },
+                        }
+                    );
+                    if (response.data) {
+                        setImages((prevImages) => [...prevImages, ...response.data]);
+                    }
+                } catch (error) {
+                    console.error("Error uploading batch: ", error);
+                    setNotification({
+                        open: true,
+                        message: "Error uploading batch",
+                        severity: "error",
+                    });
+                }
+            }
+            setLoading(false);
+        };
+        input.click();
     };
 
     // Navigation functions
@@ -82,98 +147,70 @@ const ProjectDetailPage = () => {
 
     // Function to save coordinates to backend
     const saveCoordinatesToBackend = async () => {
-        const image = images[currentIndex];
-        const coords = coordinates[image.id];
+        const imageId = images[currentIndex].id;
+        const coords = coordinates[imageId];
 
         if (!coords) {
             setNotification({
                 open: true,
-                message: 'No coordinates to save.',
-                severity: 'warning',
+                message: "No coordinates to save.",
+                severity: "warning",
             });
             return;
         }
 
         try {
-            await axiosInstance.post(`images/${image.id}/coordinates/`, coords);
+            await axiosInstance.post(
+                `images/${imageId}/save_coordinates/`,
+                { x: coords.x, y: coords.y },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
             setNotification({
                 open: true,
-                message: 'Coordinates saved successfully.',
-                severity: 'success',
+                message: "Coordinates saved successfully.",
+                severity: "success",
             });
         } catch (error) {
-            console.error('Error saving coordinates: ', error);
+            console.error("Error saving coordinates: ", error);
             setNotification({
                 open: true,
-                message: 'Error saving coordinates.',
-                severity: 'error',
+                message: "Error saving coordinates.",
+                severity: "error",
             });
-        }
-    };
-
-    // Function to handle image upload
-    const handleUploadImages = async (event) => {
-        const files = event.target.files;
-        if (!files.length) return;
-
-        const formData = new FormData();
-        for (const file of files) {
-            formData.append('image', file);
-        }
-        formData.append('project_id', id);
-
-        setLoading(true);
-        try {
-            await axiosInstance.post('images/', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-            fetchProjectDetails(); // Refresh images
-            setNotification({
-                open: true,
-                message: 'Images uploaded successfully.',
-                severity: 'success',
-            });
-        } catch (error) {
-            console.error('Error uploading images:', error);
-            setNotification({
-                open: true,
-                message: 'Error uploading images.',
-                severity: 'error',
-            });
-        } finally {
-            setLoading(false);
         }
     };
 
     // Function to download labels as CSV
     const handleSaveLabels = () => {
         const csvContent = [
-            ['image_name', 'x', 'y'],
+            ["image_name", "x", "y"],
             ...Object.entries(coordinates).map(([imageId, { x, y }]) => {
                 const image = images.find((img) => img.id === parseInt(imageId));
-                return [image?.image || 'Unknown', x, y];
+                return [image ? image.image : imageId, x, y];
             }),
         ]
-            .map((e) => e.join(','))
-            .join('\n');
+            .map((e) => e.join(","))
+            .join("\n");
 
-        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const blob = new Blob([csvContent], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
-        a.download = 'labels.csv';
+        a.download = "labels.csv";
         a.click();
     };
 
-    // Function to handle model processing (e.g., use AI model to label images)
     const handleUseModel = () => {
-        // Implement model processing logic here
+        // Implement model usage based on project type
+        // For now, just a placeholder
         setNotification({
             open: true,
-            message: 'Model processing started.',
-            severity: 'info',
+            message: `Model processing for ${modelType} not implemented.`,
+            severity: "info",
         });
     };
 
@@ -182,8 +219,8 @@ const ProjectDetailPage = () => {
         setCoordinates({});
         setNotification({
             open: true,
-            message: 'Labels cleared.',
-            severity: 'info',
+            message: "Labels cleared.",
+            severity: "info",
         });
     };
 
@@ -191,23 +228,26 @@ const ProjectDetailPage = () => {
     const handleReloadFromDatabase = async () => {
         try {
             const response = await axiosInstance.get(
-                `images/${images[currentIndex].id}/coordinates/`
+                `projects/${projectId}/coordinates/`
             );
-            setCoordinates((prev) => ({
-                ...prev,
-                [images[currentIndex].id]: response.data,
-            }));
-            setNotification({
-                open: true,
-                message: 'Coordinates reloaded from database.',
-                severity: 'success',
-            });
+            if (response.data) {
+                const newCoordinates = {};
+                response.data.forEach((coord) => {
+                    newCoordinates[coord.image_id] = { x: coord.x, y: coord.y };
+                });
+                setCoordinates(newCoordinates);
+                setNotification({
+                    open: true,
+                    message: "Coordinates reloaded from database.",
+                    severity: "success",
+                });
+            }
         } catch (error) {
-            console.error('Error reloading coordinates: ', error);
+            console.error("Error reloading coordinates: ", error);
             setNotification({
                 open: true,
-                message: 'Error reloading coordinates.',
-                severity: 'error',
+                message: "Error reloading coordinates.",
+                severity: "error",
             });
         }
     };
@@ -217,52 +257,33 @@ const ProjectDetailPage = () => {
         setNotification((prev) => ({ ...prev, open: false }));
     };
 
-    if (!project) {
-        return (
-            <Typography variant="h6" align="center">
-                Loading project details...
-            </Typography>
-        );
-    }
-
     return (
         <Box
             sx={{
-                height: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                // background:
-                //   'linear-gradient(135deg, rgb(220,220,255) 0%, rgb(210,210,255) 100%)',
-                color: 'white',
+                height: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                background:
+                    "linear-gradient(135deg, rgb(220,220,255) 0%, rgb(210,210,255) 100%)",
+                color: "white",
             }}
         >
             <CssBaseline />
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-                <Box mb={1} pt={2} pl={2} display="flex" alignItems="center">
-                    <Typography variant="h4" color="textPrimary">
-                        {project.name}
-                    </Typography>
-                    <Button
-                        variant="contained"
-                        component="label"
-                        color="primary"
-                        sx={{ ml: 2 }}
-                    >
-                        Upload Images
-                        <input
-                            type="file"
-                            hidden
-                            multiple
-                            accept="image/*"
-                            onChange={handleUploadImages}
-                        />
-                    </Button>
-                </Box>
-                <Box mr={2}>
-                    <Button variant="outlined" color="secondary" onClick={handleLogout}>
-                        Logout
-                    </Button>
-                </Box>
+            <Box mb={1} pt={2} pl={2} display="flex" alignItems="center">
+                <Button variant="contained" color="primary" onClick={handleSelectFolder}>
+                    Upload Images
+                </Button>
+                <Typography variant="h6" sx={{ ml: 2 }}>
+                    {project ? project.name : "Loading Project..."}
+                </Typography>
+                <Button
+                    variant="contained"
+                    color="secondary"
+                    onClick={logoutUser}
+                    sx={{ ml: "auto", mr: 2 }}
+                >
+                    Logout
+                </Button>
             </Box>
             {loading && <LinearProgress />}
             {images.length > 0 ? (
@@ -279,6 +300,7 @@ const ProjectDetailPage = () => {
                             onThumbnailClick={handleThumbnailClick}
                             currentIndex={currentIndex}
                             coordinates={coordinates}
+                            files={files}
                         />
                     </Box>
                     <Box
@@ -301,7 +323,7 @@ const ProjectDetailPage = () => {
                                 overflow="auto"
                             >
                                 <Box flexGrow={1} display="flex" overflow="hidden">
-                                    {project.type === 'segmentation' ? (
+                                    {modelType === "segmentation" ? (
                                         <ImageDisplaySegmentation
                                             image={images[currentIndex]}
                                             previousMask={masks[images[currentIndex].id]}
@@ -312,7 +334,7 @@ const ProjectDetailPage = () => {
                                                 }));
                                             }}
                                         />
-                                    ) : (
+                                    ) : modelType === "point_coordinate" ? (
                                         <ImageDisplayCoordinate
                                             image={images[currentIndex]}
                                             coordinates={coordinates}
@@ -323,6 +345,10 @@ const ProjectDetailPage = () => {
                                                 }))
                                             }
                                         />
+                                    ) : (
+                                        <Typography variant="body1" color="textSecondary">
+                                            Unsupported model type: {modelType}
+                                        </Typography>
                                     )}
                                 </Box>
                                 <Box mr={1}>
@@ -333,11 +359,12 @@ const ProjectDetailPage = () => {
                                     >
                                         {coordinates[images[currentIndex].id] ? (
                                             <>
-                                                x: {coordinates[images[currentIndex].id].x.toFixed(0)} | y:{' '}
+                                                x:{" "}
+                                                {coordinates[images[currentIndex].id].x.toFixed(0)} | y:{" "}
                                                 {coordinates[images[currentIndex].id].y.toFixed(0)}
                                             </>
                                         ) : (
-                                            'No coordinates available'
+                                            "No coordinates available"
                                         )}
                                     </Typography>
                                     <ProgressBar progress={progress} />
@@ -369,7 +396,7 @@ const ProjectDetailPage = () => {
                 </Box>
             ) : (
                 <Typography variant="body1" color="textSecondary" align="center">
-                    No images uploaded for this project.
+                    No images loaded. Please upload images.
                 </Typography>
             )}
             <Snackbar
@@ -380,13 +407,13 @@ const ProjectDetailPage = () => {
                 <Alert
                     onClose={handleNotificationClose}
                     severity={notification.severity}
-                    sx={{ width: '100%' }}
+                    sx={{ width: "100%" }}
                 >
                     {notification.message}
                 </Alert>
             </Snackbar>
         </Box>
     );
-};
+}
 
 export default ProjectDetailPage;
