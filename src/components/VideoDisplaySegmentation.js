@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import useVideoDisplay from "./useVideoDisplay";
 import axiosInstance from "../axiosInstance";
-import { Checkbox, FormControlLabel, Box, Typography, Button, Slider } from "@mui/material";
+import useVideoDisplay from "./useVideoDisplay";
+import {
+  Checkbox,
+  FormControlLabel,
+  Box,
+  Typography,
+  Button,
+  Slider,
+} from "@mui/material";
 
 const VideoDisplaySegmentation = ({
   video,
@@ -22,7 +29,6 @@ const VideoDisplaySegmentation = ({
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
-    calculateDisplayParams,
     currentFrame,
     setCurrentFrame,
     totalFrames,
@@ -33,89 +39,68 @@ const VideoDisplaySegmentation = ({
     handleProgressHover,
   } = useVideoDisplay(video.image);
 
+  // ------------------------------
+  // State
+  // ------------------------------
   const [points, setPoints] = useState([]);
   const [mask, setMask] = useState(frameMasks[currentFrame] || null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Video time-based state
+  const [currentTime, setCurrentTime] = useState(0); // in seconds
+  const [duration, setDuration] = useState(0);       // in seconds
+
+  // Hardcode or detect your real FPS
+  const frameRate = 30;
+
+  // If your custom hook doesn't manage these, you can track them yourself:
+  // const [totalFrames, setTotalFrames] = useState(0);
 
   const canvasRef = useRef(null);
 
+  // ------------------------------
+  // Effects
+  // ------------------------------
+  // 1) Update mask whenever we change frames
   useEffect(() => {
     setPoints([]);
     setMask(frameMasks[currentFrame] || null);
-  }, [currentFrame]);
+  }, [currentFrame, frameMasks]);
 
-  const handleImageClick = (event) => {
-    event.preventDefault();
-    if (isPanning) return;
-    if (!containerRef.current || !videoRef.current) return;
+  // 2) Listen to video events to update currentTime, duration, frames
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
 
-    const container = containerRef.current;
-    const containerRect = container.getBoundingClientRect();
+    const handleTimeUpdate = () => {
+      setCurrentTime(vid.currentTime);
+      const computedFrame = Math.floor(vid.currentTime * frameRate);
+      setCurrentFrame(computedFrame);
+    };
 
-    const clickX = event.clientX - containerRect.left;
-    const clickY = event.clientY - containerRect.top;
+    const handleLoadedMetadata = () => {
+      setDuration(vid.duration);
+      // If you need to override totalFrames: 
+      // setTotalFrames(Math.floor(vid.duration * frameRate));
+    };
 
-    // Convert click position to video coordinates
-    const vidX = (clickX - panOffset.x) / zoomLevel;
-    const vidY = (clickY - panOffset.y) / zoomLevel;
+    vid.addEventListener("timeupdate", handleTimeUpdate);
+    vid.addEventListener("loadedmetadata", handleLoadedMetadata);
 
-    // Check if click is within the video bounds
-    if (
-      vidX < 0 ||
-      vidX > vidDimensions.width ||
-      vidY < 0 ||
-      vidY > vidDimensions.height
-    ) {
-      return;
-    }
+    return () => {
+      vid.removeEventListener("timeupdate", handleTimeUpdate);
+      vid.removeEventListener("loadedmetadata", handleLoadedMetadata);
+    };
+  }, [videoRef, setCurrentFrame, frameRate]);
 
-    // Determine if inclusion or exclusion point
-    const isInclude = event.button === 0;
-
-    // Update points
-    setPoints((prevPoints) => [
-      ...prevPoints,
-      { x: vidX, y: vidY, include: isInclude },
-    ]);
-  };
-
-  const handleContextMenu = (event) => {
-    event.preventDefault();
-  };
-
-  const generateMask = async () => {
-    try {
-      const data = {
-        coordinates: points,
-        mask_input: mask || null,
-        frame: currentFrame,
-      };
-
-      const response = await axiosInstance.post(
-        `videos/${video.id}/generate_mask/`,
-        data,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      const maskData = response.data.mask;
-      setMask(maskData);
-
-      if (onMaskChange) {
-        onMaskChange(currentFrame, maskData);
-      }
-    } catch (error) {
-      console.error("Error generating mask:", error);
-    }
-  };
-
+  // 3) Whenever `points` changes, attempt to generate a new mask
   useEffect(() => {
     if (points.length > 0) {
       generateMask();
     }
-  }, [points]);
+  }, [points]); // eslint-disable-line
 
+  // 4) Handle drawing mask on canvas
   useEffect(() => {
     if (
       !mask ||
@@ -148,16 +133,142 @@ const VideoDisplaySegmentation = ({
       for (let x = 0; x < maskWidth; x++) {
         const index = (y * maskWidth + x) * 4;
         const value = mask[y][x];
-        data[index] = 0;
-        data[index + 1] = 255;
-        data[index + 2] = 0;
-        data[index + 3] = value ? 128 : 0;
+
+        // RGBA
+        data[index] = 0;      // R
+        data[index + 1] = 255; // G
+        data[index + 2] = 0;  // B
+        data[index + 3] = value ? 128 : 0; // A (semi-transparent if mask=1)
       }
     }
 
     ctx.putImageData(imageData, 0, 0);
   }, [mask, vidDimensions]);
 
+  // ------------------------------
+  // Segmentation / Mask methods
+  // ------------------------------
+  const handleImageClick = (event) => {
+    event.preventDefault();
+    if (isPanning) return;
+    if (!containerRef.current || !videoRef.current) return;
+
+    const container = containerRef.current;
+    const containerRect = container.getBoundingClientRect();
+
+    const clickX = event.clientX - containerRect.left;
+    const clickY = event.clientY - containerRect.top;
+
+    // Convert click position to video coordinates
+    const vidX = (clickX - panOffset.x) / zoomLevel;
+    const vidY = (clickY - panOffset.y) / zoomLevel;
+
+    // Check if click is within the video bounds
+    if (
+      vidX < 0 ||
+      vidX > vidDimensions.width ||
+      vidY < 0 ||
+      vidY > vidDimensions.height
+    ) {
+      return;
+    }
+
+    // Left-click => inclusion point, Right-click => exclusion point
+    const isInclude = event.button === 0;
+
+    // Update points
+    setPoints((prevPoints) => [
+      ...prevPoints,
+      { x: vidX, y: vidY, include: isInclude },
+    ]);
+  };
+
+  const handleContextMenu = (event) => {
+    event.preventDefault();
+  };
+
+  const generateMask = async () => {
+    try {
+      const data = {
+        coordinates: points,
+        mask_input: mask || null,
+        frame: currentFrame,
+      };
+
+      const response = await axiosInstance.post(
+        `videos/${video.id}/generate_mask/`,
+        data,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const maskData = response.data.mask;
+      setMask(maskData);
+
+      if (onMaskChange) {
+        onMaskChange(currentFrame, maskData);
+      }
+    } catch (error) {
+      console.error("Error generating mask:", error);
+    }
+  };
+
+  const clearPoints = () => {
+    setPoints([]);
+    setMask(null);
+  };
+
+  // ------------------------------
+  // Playback controls
+  // ------------------------------
+  const togglePlayPause = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handlePreviousFrame = () => {
+    if (videoRef.current) {
+      const newTime = Math.max(0, (currentFrame - 1) / frameRate);
+      videoRef.current.currentTime = newTime;
+      setCurrentFrame(Math.floor(newTime * frameRate));
+    }
+  };
+
+  const handleNextFrame = () => {
+    if (videoRef.current) {
+      const newTime = Math.min(duration, (currentFrame + 1) / frameRate);
+      videoRef.current.currentTime = newTime;
+      setCurrentFrame(Math.floor(newTime * frameRate));
+    }
+  };
+
+  // ------------------------------
+  // Slider (time-based)
+  // ------------------------------
+  const handleSliderChange = (event, newValue) => {
+    setCurrentTime(newValue); 
+  };
+
+  // Called when user finishes sliding or clicks on the slider
+  const handleSliderChangeCommitted = (event, newValue) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = newValue;
+      setCurrentFrame(Math.floor(newValue * frameRate));
+    }
+  };
+
+  // ------------------------------
+  // Rendering Points
+  // ------------------------------
   const renderPoints = () => {
     return points.map((point, index) => {
       const x = point.x * zoomLevel + panOffset.x;
@@ -182,41 +293,36 @@ const VideoDisplaySegmentation = ({
               backgroundColor: point.include ? "green" : "red",
               border: "2px solid white",
             }}
-          ></div>
+          />
         </div>
       );
     });
   };
 
-  const clearPoints = () => {
-    setPoints([]);
-    setMask(null);
-  };
+  // ------------------------------
+  // Helpers
+  // ------------------------------
+  const formatTime = (seconds) => {
+    if (!seconds || Number.isNaN(seconds)) return "00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
 
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  const handleFrameChange = (newFrame) => {
-    if (newFrame >= 0 && newFrame < totalFrames) {
-      setCurrentFrame(newFrame);
-      if (videoRef.current) {
-        videoRef.current.currentTime = newFrame / videoRef.current.frameRate;
-      }
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, "0")}:${s
+        .toString()
+        .padStart(2, "0")}`;
+    } else {
+      return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
     }
   };
 
-  const togglePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
+  // ------------------------------
+  // Render
+  // ------------------------------
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Keep Zoom & Pan checkbox */}
       <Box
         sx={{
           position: "absolute",
@@ -245,6 +351,7 @@ const VideoDisplaySegmentation = ({
         />
       </Box>
 
+      {/* Clear Points button */}
       <Box
         sx={{
           position: "absolute",
@@ -260,10 +367,11 @@ const VideoDisplaySegmentation = ({
         </Button>
       </Box>
 
+      {/* Playback Control Buttons */}
       <Box
         sx={{
           position: "absolute",
-          bottom: 20,
+          bottom: 80,
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 1,
@@ -272,52 +380,51 @@ const VideoDisplaySegmentation = ({
         }}
       >
         <Button variant="contained" onClick={togglePlayPause}>
-          {isPlaying ? 'Pause' : 'Play'}
+          {isPlaying ? "Pause" : "Play"}
         </Button>
-        <Button variant="contained" onClick={() => handleFrameChange(currentFrame - 1)}>
+        <Button variant="contained" onClick={handlePreviousFrame}>
           Previous Frame
         </Button>
-        <Button variant="contained" onClick={() => handleFrameChange(currentFrame + 1)}>
+        <Button variant="contained" onClick={handleNextFrame}>
           Next Frame
         </Button>
       </Box>
 
+      {/* Slider-based timeline */}
       <Box
         sx={{
           position: "absolute",
-          bottom: 80,
+          bottom: 20,
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 1,
           width: "80%",
-          height: 8,
-          backgroundColor: "rgba(255,255,255,0.3)",
-          borderRadius: 4,
-          cursor: "pointer",
-        }}
-        onMouseMove={handleProgressHover}
-        onMouseLeave={() => setShowPreview(false)}
-        onClick={(e) => {
-          if (videoRef.current && containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const width = rect.width;
-            const newTime = (x / width) * videoRef.current.duration;
-            videoRef.current.currentTime = newTime;
-            setCurrentFrame(Math.floor(newTime * videoRef.current.frameRate));
-          }
         }}
       >
+        <Slider
+          min={0}
+          max={duration}
+          step={0.01}
+          value={Math.min(currentTime, duration)}
+          onChange={handleSliderChange}
+          onChangeCommitted={handleSliderChangeCommitted}
+          aria-labelledby="video-progress-slider"
+        />
+
+        {/* Time Display */}
         <Box
           sx={{
-            width: `${(currentFrame / totalFrames) * 100}%`,
-            height: "100%",
-            backgroundColor: "white",
-            borderRadius: 4,
+            display: "flex",
+            justifyContent: "space-between",
+            mt: 1,
           }}
-        />
+        >
+          <Typography variant="body2">{formatTime(currentTime)}</Typography>
+          <Typography variant="body2">{formatTime(duration)}</Typography>
+        </Box>
       </Box>
 
+      {/* Container holding video + mask + points */}
       <div
         ref={containerRef}
         style={{
@@ -344,6 +451,7 @@ const VideoDisplaySegmentation = ({
         onMouseLeave={handleMouseUp}
         onContextMenu={handleContextMenu}
       >
+        {/* Actual video */}
         <video
           ref={videoRef}
           src={video.image}
@@ -360,6 +468,7 @@ const VideoDisplaySegmentation = ({
           }}
         />
 
+        {/* Mask overlay */}
         {mask && (
           <canvas
             ref={canvasRef}
@@ -377,9 +486,11 @@ const VideoDisplaySegmentation = ({
           />
         )}
 
+        {/* Points for segmentation */}
         {renderPoints()}
       </div>
 
+      {/* Frame/Time Preview (if implemented) */}
       {showPreview && (
         <div
           style={{
