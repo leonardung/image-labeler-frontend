@@ -217,13 +217,74 @@ function ProjectDetailPage() {
     };
 
     const handleUseModel = () => {
-        // Implement model usage based on project type
-        // For now, just a placeholder
+        if (!projectId) {
+            setNotification({
+                open: true,
+                message: "Project ID is missing.",
+                severity: "warning",
+            });
+            return;
+        }
+
+        setProgress(0);
+
+        const socket = new WebSocket("ws://localhost:8000/ws/process-images/");
+
+        socket.onopen = () => {
+            console.log("WebSocket connection established.");
+            socket.send(
+                JSON.stringify({
+                    project_id: projectId,
+                })
+            );
+        };
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.status === "success") {
+                const { image_id, x, y } = data.coordinates || {};
+                const progress = data.progress || 0;
+                setProgress(progress);
+
+                if (image_id && x != null && y != null) {
+                    setCoordinates((prevCoordinates) => ({
+                        ...prevCoordinates,
+                        [image_id]: { x, y },
+                    }));
+                }
+            } else if (data.status === "complete") {
+                setNotification({
+                    open: true,
+                    message: "Coordinate labeling completed.",
+                    severity: "success",
+                });
+                socket.close();
+            } else if (data.status === "error") {
+                console.error("Error from server:", data.message);
+                setNotification({
+                    open: true,
+                    message: `Error: ${data.message}`,
+                    severity: "error",
+                });
+            }
+        };
+
+        socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
         setNotification({
             open: true,
-            message: `Model processing for ${modelType} not implemented.`,
-            severity: "info",
+                message: "WebSocket error occurred.",
+                severity: "error",
         });
+            socket.close();
+        };
+
+        socket.onclose = () => {
+            console.log("WebSocket connection closed.");
+            setTimeout(() => {
+                setProgress(0);
+            }, 3000);
+        };
     };
 
     // Function to clear labels

@@ -1,5 +1,5 @@
 // useImageDisplay.js
-import React, { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 
 const useImageDisplay = (imageSrc) => {
   const imageRef = useRef(null);
@@ -90,13 +90,31 @@ const useImageDisplay = (imageSrc) => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
-    // Use ResizeObserver to detect changes in the container's size
+    // Debounced resize handler
+    const debouncedResizeHandler = () => {
+      calculateDisplayParams();
+      if (!keepZoomPan) {
+        initializeZoomPan();
+      }
+    };
+
+    // Create debounced version of the handler
+    let timeoutId;
+    const debounce = (fn, delay) => {
+      return () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(fn, delay);
+      };
+    };
+
+    // Use ResizeObserver with debouncing and error handling
     let resizeObserver;
     if (containerRef.current) {
-      resizeObserver = new ResizeObserver(() => {
-        calculateDisplayParams();
-        if (!keepZoomPan) {
-          initializeZoomPan();
+      resizeObserver = new ResizeObserver((entries, observer) => {
+        try {
+          debounce(debouncedResizeHandler, 100)();
+        } catch (error) {
+          console.warn('ResizeObserver error:', error);
         }
       });
       resizeObserver.observe(containerRef.current);

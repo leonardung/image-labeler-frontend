@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import useImageDisplay from "./useImageDisplay";
-import axios from "axios";
+import axiosInstance from "../axiosInstance";
 import { Checkbox, FormControlLabel, Box, Typography, Button, Slider } from "@mui/material";
 
 const ImageDisplaySegmentation = ({
@@ -87,8 +87,8 @@ const ImageDisplaySegmentation = ({
         mask_input: mask || null,
       };
 
-      const response = await axios.post(
-        `http://localhost:8000/api/images/${image.id}/generate_mask/`,
+      const response = await axiosInstance.post(
+        `images/${image.id}/generate_mask/`,
         data,
         {
           headers: {
