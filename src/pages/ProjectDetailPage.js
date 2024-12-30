@@ -5,6 +5,7 @@ import { Button, Typography, Box, CssBaseline, Snackbar, Alert, LinearProgress }
 
 import ImageDisplayCoordinate from "../components/ImageDisplayCoordinate";
 import ImageDisplaySegmentation from "../components/ImageDisplaySegmentation";
+import VideoDisplaySegmentation from "../components/VideoDisplaySegmentation";
 import NavigationButtons from "../components/NavigationButtons";
 import Controls from "../components/Controls";
 import ProgressBar from "../components/ProgressBar";
@@ -17,7 +18,7 @@ function ProjectDetailPage() {
     const { logoutUser } = useContext(AuthContext);
 
     const [project, setProject] = useState(null);
-    const [modelType, setModelType] = useState("segmentation"); // Default type
+    const [modelType, setModelType] = useState("video_tracking_segmentation"); // Default type
     const [images, setImages] = useState([]);
     const [coordinates, setCoordinates] = useState({});
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -87,21 +88,23 @@ function ProjectDetailPage() {
         const input = document.createElement("input");
         input.type = "file";
         input.multiple = true;
-        input.accept = "image/*";
+        input.accept = modelType === "video_tracking_segmentation" ? "video/*" : "image/*";
         input.onchange = async (event) => {
             const selectedFiles = Array.from(event.target.files);
-            const imageFiles = selectedFiles.filter((file) =>
-                file.type.startsWith("image/")
+            const filteredFiles = selectedFiles.filter((file) =>
+                modelType === "video_tracking_segmentation" 
+                    ? file.type.startsWith("video/")
+                    : file.type.startsWith("image/")
             );
-            setFiles(imageFiles);
+            setFiles(filteredFiles);
             setCurrentIndex(0);
             setCoordinates({});
 
             // Batch upload files
             const batchSize = 50; // Adjust based on your needs and server capacity
             setLoading(true);
-            for (let i = 0; i < imageFiles.length; i += batchSize) {
-                const batchFiles = imageFiles.slice(i, i + batchSize);
+            for (let i = 0; i < filteredFiles.length; i += batchSize) {
+                const batchFiles = filteredFiles.slice(i, i + batchSize);
 
                 // Create FormData for the batch
                 const formData = new FormData();
@@ -271,11 +274,11 @@ function ProjectDetailPage() {
 
         socket.onerror = (error) => {
             console.error("WebSocket error:", error);
-        setNotification({
-            open: true,
+            setNotification({
+                open: true,
                 message: "WebSocket error occurred.",
                 severity: "error",
-        });
+            });
             socket.close();
         };
 
@@ -417,7 +420,18 @@ function ProjectDetailPage() {
                                 overflow="auto"
                             >
                                 <Box flexGrow={1} display="flex" overflow="hidden">
-                                    {modelType === "segmentation" ? (
+                                    {modelType === "video_tracking_segmentation" ? (
+                                        <VideoDisplaySegmentation
+                                            video={images[currentIndex]}
+                                            frameMasks={masks}
+                                            onMaskChange={(frame, newMask) => {
+                                                setMasks((prevMasks) => ({
+                                                    ...prevMasks,
+                                                    [frame]: newMask,
+                                                }));
+                                            }}
+                                        />
+                                    ) : modelType === "segmentation" ? (
                                         <ImageDisplaySegmentation
                                             image={images[currentIndex]}
                                             previousMask={masks[images[currentIndex].id]}

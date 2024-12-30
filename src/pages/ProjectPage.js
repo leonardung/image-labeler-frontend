@@ -21,6 +21,7 @@ const ProjectPage = () => {
         { value: 'multi_point_coordinate', label: 'Multi Point Coordinate' },
         { value: 'bounding_box', label: 'Bounding Box' },
         { value: 'segmentation', label: 'Segmentation' },
+        { value: 'video_tracking_segmentation', label: 'Video Tracking Segmentation' },
     ];
 
     useEffect(() => {
