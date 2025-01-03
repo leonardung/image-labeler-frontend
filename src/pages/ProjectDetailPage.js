@@ -5,7 +5,7 @@ import { Button, Typography, Box, CssBaseline, Snackbar, Alert, LinearProgress }
 
 import ImageDisplayCoordinate from "../components/ImageDisplayCoordinate";
 import ImageDisplaySegmentation from "../components/ImageDisplaySegmentation";
-import VideoDisplaySegmentation from "../components/VideoDisplaySegmentation";
+import VideoDisplaySegmentation from "../components/VideoDisplaySegmentationSample";
 import NavigationButtons from "../components/NavigationButtons";
 import Controls from "../components/Controls";
 import ProgressBar from "../components/ProgressBar";
@@ -422,8 +422,8 @@ function ProjectDetailPage() {
                                 <Box flexGrow={1} display="flex" overflow="hidden">
                                     {modelType === "video_tracking_segmentation" ? (
                                         <VideoDisplaySegmentation
-                                            video={images[currentIndex]}
-                                            frameMasks={masks}
+                                            image={images[currentIndex]}
+                                            previousMask={masks}
                                             onMaskChange={(frame, newMask) => {
                                                 setMasks((prevMasks) => ({
                                                     ...prevMasks,

@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
+import useImageDisplay from "./useImageDisplay";
 import useVideoDisplay from "./useVideoDisplay";
 import axiosInstance from "../axiosInstance";
 import { Checkbox, FormControlLabel, Box, Typography, Button, Slider } from "@mui/material";
 
 const VideoDisplaySegmentation = ({
-  video,
-  frameMasks,
+  image,
+  previousMask,
   onMaskChange,
 }) => {
   const {
-    videoRef,
+    imageRef,
     containerRef,
     zoomLevel,
     panOffset,
-    vidDimensions,
+    imgDimensions,
     isPanning,
     ShiftKeyPress,
     keepZoomPan,
@@ -23,32 +24,24 @@ const VideoDisplaySegmentation = ({
     handleMouseMove,
     handleMouseUp,
     calculateDisplayParams,
-    currentFrame,
-    setCurrentFrame,
-    totalFrames,
-    showPreview,
-    setShowPreview,
-    previewTime,
-    previewPosition,
-    handleProgressHover,
-  } = useVideoDisplay(video.image);
+  } = useImageDisplay(image.image);
+
 
   const [points, setPoints] = useState([]);
-  const [mask, setMask] = useState(frameMasks[currentFrame] || null);
-
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [mask, setMask] = useState(previousMask[currentFrame] || null);
   const canvasRef = useRef(null);
 
   useEffect(() => {
     setPoints([]);
-    setMask(frameMasks[currentFrame] || null);
+    setMask(previousMask[currentFrame] || null);
   }, [currentFrame]);
 
   const handleImageClick = (event) => {
-    console.log(currentFrame,totalFrames )
 
     event.preventDefault();
     if (isPanning) return;
-    if (!containerRef.current || !videoRef.current) return;
+    if (!containerRef.current || !imageRef.current) return;
 
     const container = containerRef.current;
     const containerRect = container.getBoundingClientRect();
@@ -63,9 +56,9 @@ const VideoDisplaySegmentation = ({
     // Check if click is within the video bounds
     if (
       vidX < 0 ||
-      vidX > vidDimensions.width ||
+      vidX > imgDimensions.width ||
       vidY < 0 ||
-      vidY > vidDimensions.height
+      vidY > imgDimensions.height
     ) {
       return;
     }
@@ -93,7 +86,7 @@ const VideoDisplaySegmentation = ({
       };
 
       const response = await axiosInstance.post(
-        `videos/${video.id}/generate_mask/`,
+        `videos/${image.id}/generate_mask/`,
         data,
         {
           headers: {
@@ -138,8 +131,8 @@ const VideoDisplaySegmentation = ({
     canvas.width = maskWidth;
     canvas.height = maskHeight;
 
-    canvas.style.width = `${vidDimensions.width}px`;
-    canvas.style.height = `${vidDimensions.height}px`;
+    canvas.style.width = `${imgDimensions.width}px`;
+    canvas.style.height = `${imgDimensions.height}px`;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -158,7 +151,7 @@ const VideoDisplaySegmentation = ({
     }
 
     ctx.putImageData(imageData, 0, 0);
-  }, [mask, vidDimensions]);
+  }, [mask, imgDimensions]);
 
   const renderPoints = () => {
     return points.map((point, index) => {
@@ -198,20 +191,43 @@ const VideoDisplaySegmentation = ({
   const [isPlaying, setIsPlaying] = useState(false);
 
   const handleFrameChange = (newFrame) => {
-    if (newFrame >= 0 && newFrame < totalFrames) {
-      setCurrentFrame(newFrame);
-      if (videoRef.current) {
-        videoRef.current.currentTime = newFrame / videoRef.current.frameRate;
-      }
+    if (!imageRef.current) return;
+    const safeFrame = Math.max(newFrame, 0);
+    if (isPlaying) {
+      imageRef.current.pause();
+      setIsPlaying(false);
     }
+    const newTime = safeFrame / image.frame_rate;
+    console.log(newFrame, safeFrame, image.frame_rate)
+    console.log(imageRef.current.currentTime, newTime)
+    imageRef.current.currentTime = newTime;
+    setCurrentFrame(safeFrame);
   };
 
+  useEffect(() => {
+    const video = imageRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      // If you want to keep your 'currentFrame' synced to the actual currentTime
+      const frame = Math.floor(video.currentTime * image.frame_rate);
+    console.log("time update", video.currentTime, image.frame_rate, video.currentTime)
+    setCurrentFrame(frame);
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+    };
+  }, []);
+
   const togglePlayPause = () => {
-    if (videoRef.current) {
+    if (imageRef.current) {
       if (isPlaying) {
-        videoRef.current.pause();
+        imageRef.current.pause();
       } else {
-        videoRef.current.play();
+        imageRef.current.play();
       }
       setIsPlaying(!isPlaying);
     }
@@ -276,10 +292,10 @@ const VideoDisplaySegmentation = ({
         <Button variant="contained" onClick={togglePlayPause}>
           {isPlaying ? 'Pause' : 'Play'}
         </Button>
-        <Button variant="contained" onClick={() => handleFrameChange(currentFrame - 1)}>
+        <Button variant="contained" onClick={() => handleFrameChange(currentFrame)}>
           Previous Frame
         </Button>
-        <Button variant="contained" onClick={() => handleFrameChange(currentFrame + 1)}>
+        <Button variant="contained" onClick={() => handleFrameChange(currentFrame + 2)}>
           Next Frame
         </Button>
       </Box>
@@ -312,14 +328,15 @@ const VideoDisplaySegmentation = ({
         onContextMenu={handleContextMenu}
       >
         <video
-          ref={videoRef}
-          src={video.image}
+          ref={imageRef}
+          src={image.image}
+          onLoad={calculateDisplayParams}
           style={{
             position: "absolute",
             top: 0,
             left: 0,
-            width: `${vidDimensions.width}px`,
-            height: `${vidDimensions.height}px`,
+            width: `${imgDimensions.width}px`,
+            height: `${imgDimensions.height}px`,
             transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
             transformOrigin: "0 0",
             userSelect: "none",
@@ -334,8 +351,8 @@ const VideoDisplaySegmentation = ({
               position: "absolute",
               top: 0,
               left: 0,
-              width: `${vidDimensions.width}px`,
-              height: `${vidDimensions.height}px`,
+              width: `${imgDimensions.width}px`,
+              height: `${imgDimensions.height}px`,
               transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
               transformOrigin: "0 0",
               userSelect: "none",

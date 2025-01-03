@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const useVideoDisplay = (videoUrl) => {
+const useVideoDisplay = (base_video) => {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -101,12 +101,12 @@ const useVideoDisplay = (videoUrl) => {
     if (!video) return;
 
     const handleLoadedMetadata = () => {
-      setTotalFrames(Math.floor(video.duration * video.frameRate));
+      setTotalFrames(Math.floor(base_video.total_frames));
       calculateDisplayParams();
     };
 
     const handleTimeUpdate = () => {
-      setCurrentFrame(Math.floor(video.currentTime * video.frameRate));
+      setCurrentFrame(Math.floor(video.currentTime * base_video.frame_rate));
     };
 
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -116,7 +116,7 @@ const useVideoDisplay = (videoUrl) => {
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
       video.removeEventListener("timeupdate", handleTimeUpdate);
     };
-  }, [videoUrl]);
+  }, [base_video.image]);
 
   const handleProgressHover = (e) => {
     if (!containerRef.current || !videoRef.current) return;

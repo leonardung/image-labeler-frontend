@@ -27,7 +27,11 @@ const useImageDisplay = (imageSrc) => {
     const imgNaturalWidth = img.naturalWidth;
     const imgNaturalHeight = img.naturalHeight;
 
-    setImgDimensions({ width: imgNaturalWidth, height: imgNaturalHeight });
+    const { videoWidth, videoHeight } = imageRef.current;
+    // setImgDimensions({ width: imgNaturalWidth, height: imgNaturalHeight });
+    setImgDimensions({ width: videoWidth, height: videoHeight });
+    console.log("1111111", imgNaturalWidth,imgNaturalHeight)
+    console.log("1111111", videoWidth, videoHeight)
   };
 
   // Function to initialize zoomLevel and panOffset
