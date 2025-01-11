@@ -5,7 +5,6 @@ import { Button, Typography, Box, CssBaseline, Snackbar, Alert, LinearProgress }
 
 import ImageDisplayCoordinate from "../components/ImageDisplayCoordinate";
 import ImageDisplaySegmentation from "../components/ImageDisplaySegmentation";
-import VideoDisplaySegmentation from "../components/VideoDisplaySegmentationSample";
 import NavigationButtons from "../components/NavigationButtons";
 import Controls from "../components/Controls";
 import ProgressBar from "../components/ProgressBar";
@@ -87,101 +86,109 @@ function ProjectDetailPage() {
         // Create a file input dynamically
         const input = document.createElement("input");
         input.type = "file";
-      
+
         // Decide multiple vs. single and accept type based on model
         if (modelType === "video_tracking_segmentation") {
-          input.multiple = false;     // Only one file (video)
-          input.accept = "video/*";
+            input.multiple = false;     // Only one file (video)
+            input.accept = "video/*";
         } else {
-          input.multiple = true;      // Multiple image files
-          input.accept = "image/*";
+            input.multiple = true;      // Multiple image files
+            input.accept = "image/*";
         }
-      
+
         input.onchange = async (event) => {
-          // Update your local state
-          setCurrentIndex(0);
-          setCoordinates({});
-          setLoading(true);
-      
-          // -----------------------------
-          // 1) Handle the single VIDEO case
-          // -----------------------------
-          if (modelType === "video_tracking_segmentation" && filteredFiles.length > 0) {
-            const formData = new FormData();
-            formData.append("project_id", projectId);
-      
-            // Only a single video allowed, so take the first one
-            formData.append("video", filteredFiles[0]);
-      
-            try {
-              const response = await axiosInstance.post(`video/`, formData, {
-                headers: {
-                  "Content-Type": "multipart/form-data",
-                },
-              });
-      
-              if (response.data) {
-                // Backend will likely return an array of frame images
-                setImages((prevImages) => [...prevImages, ...response.data]);
-              }
-            } catch (error) {
-              console.error("Error uploading video: ", error);
-              setNotification({
-                open: true,
-                message: "Error uploading video",
-                severity: "error",
-              });
-            } finally {
-              setLoading(false);
+            const selectedFiles = Array.from(event.target.files);
+            // Filter out any files that don't match the expected type
+            const filteredFiles = selectedFiles.filter((file) =>
+                modelType === "video_tracking_segmentation"
+                    ? file.type.startsWith("video/")
+                    : file.type.startsWith("image/")
+            );
+
+            // Update your local state
+            setCurrentIndex(0);
+            setCoordinates({});
+            setLoading(true);
+
+            // -----------------------------
+            // 1) Handle the single VIDEO case
+            // -----------------------------
+            if (modelType === "video_tracking_segmentation" && filteredFiles.length > 0) {
+                const formData = new FormData();
+                formData.append("project_id", projectId);
+
+                // Only a single video allowed, so take the first one
+                formData.append("video", filteredFiles[0]);
+
+                try {
+                    const response = await axiosInstance.post(`video/`, formData, {
+                        headers: {
+                            "Content-Type": "multipart/form-data",
+                        },
+                    });
+
+                    if (response.data) {
+                        // Backend will likely return an array of frame images
+                        setImages((prevImages) => [...prevImages, ...response.data]);
+                    }
+                } catch (error) {
+                    console.error("Error uploading video: ", error);
+                    setNotification({
+                        open: true,
+                        message: "Error uploading video",
+                        severity: "error",
+                    });
+                } finally {
+                    setLoading(false);
+                }
+
+                // Stop here, since we only handle a single video
+                return;
             }
-      
-            // Stop here, since we only handle a single video
-            return;
-          }
-      
-          // -----------------------------
-          // 2) Handle multiple IMAGE files
-          // -----------------------------
-          const batchSize = 50; // Adjust to your server’s capacity
-          for (let i = 0; i < filteredFiles.length; i += batchSize) {
-            const batchFiles = filteredFiles.slice(i, i + batchSize);
-      
-            // Prepare form data for each batch
-            const formData = new FormData();
-            formData.append("project_id", projectId);
-      
-            batchFiles.forEach((file) => {
-              formData.append("images", file);
-            });
-      
-            // Upload each batch
-            try {
-              const response = await axiosInstance.post(`images/`, formData, {
-                headers: {
-                  "Content-Type": "multipart/form-data",
-                },
-              });
-      
-              if (response.data) {
-                setImages((prevImages) => [...prevImages, ...response.data]);
-              }
-            } catch (error) {
-              console.error("Error uploading batch: ", error);
-              setNotification({
-                open: true,
-                message: "Error uploading batch",
-                severity: "error",
-              });
+
+            // -----------------------------
+            // 2) Handle multiple IMAGE files
+            // -----------------------------
+            const batchSize = 50; // Adjust to your server’s capacity
+            for (let i = 0; i < filteredFiles.length; i += batchSize) {
+                const batchFiles = filteredFiles.slice(i, i + batchSize);
+
+                // Prepare form data for each batch
+                const formData = new FormData();
+                formData.append("project_id", projectId);
+
+                batchFiles.forEach((file) => {
+                    formData.append("images", file);
+                });
+
+                // Upload each batch
+                try {
+                    const response = await axiosInstance.post(`images/`, formData, {
+                        headers: {
+                            "Content-Type": "multipart/form-data",
+                        },
+                    });
+
+                    if (response.data) {
+                        setImages((prevImages) => [...prevImages, ...response.data]);
+                    }
+                } catch (error) {
+                    console.error("Error uploading batch: ", error);
+                    setNotification({
+                        open: true,
+                        message: "Error uploading batch",
+                        severity: "error",
+                    });
+                }
             }
-          }
-      
-          setLoading(false);
+
+            setLoading(false);
         };
-      
+
         // Programmatically trigger the file input
         input.click();
-      };
-      
+    };
+
 
     // Navigation functions
     const handleNextImage = () => {
@@ -461,18 +468,7 @@ function ProjectDetailPage() {
                                 overflow="auto"
                             >
                                 <Box flexGrow={1} display="flex" overflow="hidden">
-                                    {modelType === "video_tracking_segmentation" ? (
-                                        <VideoDisplaySegmentation
-                                            image={images[currentIndex]}
-                                            previousMask={masks}
-                                            onMaskChange={(frame, newMask) => {
-                                                setMasks((prevMasks) => ({
-                                                    ...prevMasks,
-                                                    [frame]: newMask,
-                                                }));
-                                            }}
-                                        />
-                                    ) : modelType === "segmentation" ? (
+                                    {(modelType === "segmentation" || modelType === "video_tracking_segmentation") ? (
                                         <ImageDisplaySegmentation
                                             image={images[currentIndex]}
                                             previousMask={masks[images[currentIndex].id]}
