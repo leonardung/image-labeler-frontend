@@ -50,14 +50,14 @@ function ThumbnailGrid({ images, onThumbnailClick, currentIndex, coordinates }) 
         }}
       >
         <img
-          src={image.thumbnailUrl || image.image}
+          src={image.thumbnail || image.image}
           alt={`Thumbnail ${index}`}
           loading="lazy"
           style={{
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            opacity: hasCoordinates ? 1 : 0.7,
+            opacity: hasCoordinates ? 1 : 0.9,
           }}
         />
         {!hasCoordinates && (
@@ -70,9 +70,9 @@ function ThumbnailGrid({ images, onThumbnailClick, currentIndex, coordinates }) 
             display="flex"
             justifyContent="center"
             alignItems="center"
-            bgcolor="rgba(0,0,0,0.5)"
+            bgcolor="rgba(0,0,0,0.4)"
           >
-            <Typography variant="caption" color="white">
+            <Typography variant="overline" color="white">
               No labels
             </Typography>
           </Box>

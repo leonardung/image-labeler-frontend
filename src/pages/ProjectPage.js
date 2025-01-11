@@ -37,9 +37,15 @@ const ProjectPage = () => {
     };
 
     const handleCreateProject = async () => {
-        await axiosInstance.post('projects/', newProject);
-        setOpenCreateDialog(false);
-        fetchProjects();
+        try {
+            const response = await axiosInstance.post('projects/', newProject);
+            const projectId = response.data.id;
+            setOpenCreateDialog(false);
+            fetchProjects();
+            navigate(`/projects/${projectId}`);
+        } catch (error) {
+            console.error('Error creating project:', error);
+        }
     };
 
     const handleOpenDeleteDialog = (project) => {

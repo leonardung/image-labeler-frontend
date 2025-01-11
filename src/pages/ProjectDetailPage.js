@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axiosInstance from "../axiosInstance";
-import { Button, Typography, Box, CssBaseline, Snackbar, Alert, LinearProgress } from "@mui/material";
+import {
+    Button,
+    Typography,
+    Box,
+    CssBaseline,
+    Snackbar,
+    Alert,
+    LinearProgress,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+} from "@mui/material";
 
 import ImageDisplayCoordinate from "../components/ImageDisplayCoordinate";
 import ImageDisplaySegmentation from "../components/ImageDisplaySegmentation";
@@ -29,6 +42,10 @@ function ProjectDetailPage() {
         message: "",
         severity: "info",
     });
+    const [openSettingsDialog, setOpenSettingsDialog] = useState(false);
+    const [maxFrames, setMaxFrames] = useState(500);
+    const [stride, setStride] = useState(1);
+
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -83,42 +100,49 @@ function ProjectDetailPage() {
 
     // Function to select and upload images
     const handleSelectFolder = async () => {
-        // Create a file input dynamically
+        if (modelType === "video_tracking_segmentation") {
+            setOpenSettingsDialog(true); // Open the settings dialog
+            return;
+        }
+
+        selectFiles();
+    };
+
+    const handleSettingsSubmit = () => {
+        setOpenSettingsDialog(false);
+        selectFiles(); // Proceed to file selection after getting maxFrames and stride
+    };
+
+    const selectFiles = async () => {
         const input = document.createElement("input");
         input.type = "file";
 
-        // Decide multiple vs. single and accept type based on model
         if (modelType === "video_tracking_segmentation") {
-            input.multiple = false;     // Only one file (video)
+            input.multiple = false;
             input.accept = "video/*";
         } else {
-            input.multiple = true;      // Multiple image files
+            input.multiple = true;
             input.accept = "image/*";
         }
 
         input.onchange = async (event) => {
             const selectedFiles = Array.from(event.target.files);
-            // Filter out any files that don't match the expected type
             const filteredFiles = selectedFiles.filter((file) =>
                 modelType === "video_tracking_segmentation"
                     ? file.type.startsWith("video/")
                     : file.type.startsWith("image/")
             );
 
-            // Update your local state
             setCurrentIndex(0);
             setCoordinates({});
             setLoading(true);
 
-            // -----------------------------
-            // 1) Handle the single VIDEO case
-            // -----------------------------
             if (modelType === "video_tracking_segmentation" && filteredFiles.length > 0) {
                 const formData = new FormData();
                 formData.append("project_id", projectId);
-
-                // Only a single video allowed, so take the first one
                 formData.append("video", filteredFiles[0]);
+                formData.append("max_frames", maxFrames);
+                formData.append("stride", stride);
 
                 try {
                     const response = await axiosInstance.post(`video/`, formData, {
@@ -128,7 +152,6 @@ function ProjectDetailPage() {
                     });
 
                     if (response.data) {
-                        // Backend will likely return an array of frame images
                         setImages((prevImages) => [...prevImages, ...response.data]);
                     }
                 } catch (error) {
@@ -142,18 +165,13 @@ function ProjectDetailPage() {
                     setLoading(false);
                 }
 
-                // Stop here, since we only handle a single video
                 return;
             }
 
-            // -----------------------------
-            // 2) Handle multiple IMAGE files
-            // -----------------------------
-            const batchSize = 50; // Adjust to your server’s capacity
+            const batchSize = 50;
             for (let i = 0; i < filteredFiles.length; i += batchSize) {
                 const batchFiles = filteredFiles.slice(i, i + batchSize);
 
-                // Prepare form data for each batch
                 const formData = new FormData();
                 formData.append("project_id", projectId);
 
@@ -161,7 +179,6 @@ function ProjectDetailPage() {
                     formData.append("images", file);
                 });
 
-                // Upload each batch
                 try {
                     const response = await axiosInstance.post(`images/`, formData, {
                         headers: {
@@ -185,7 +202,6 @@ function ProjectDetailPage() {
             setLoading(false);
         };
 
-        // Programmatically trigger the file input
         input.click();
     };
 
@@ -404,6 +420,9 @@ function ProjectDetailPage() {
             }
         });
     };
+    const handleBackToRoot = () => {
+        navigate("/");
+    };
 
     return (
         <Box
@@ -416,20 +435,67 @@ function ProjectDetailPage() {
         >
             <CssBaseline />
             <Box mb={1} pt={2} pl={2} display="flex" alignItems="center">
-                <Button variant="contained" color="primary" onClick={handleSelectFolder}>
-                    Upload Images
+                {/* Conditionally render the button text based on modelType */}
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleSelectFolder}
+                >
+                    {modelType === "video_tracking_segmentation" ? "Upload Video" : "Upload Images"}
                 </Button>
+                {/* Dialog for maxFrames and stride */}
+                <Dialog open={openSettingsDialog} onClose={() => setOpenSettingsDialog(false)}>
+                    <DialogTitle>Video Settings</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            label="Max Number of Frames"
+                            type="number"
+                            fullWidth
+                            margin="normal"
+                            value={maxFrames}
+                            onChange={(e) => setMaxFrames(Number(e.target.value))}
+                        />
+                        <TextField
+                            label="Stride"
+                            type="number"
+                            fullWidth
+                            margin="normal"
+                            value={stride}
+                            onChange={(e) => setStride(Number(e.target.value))}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setOpenSettingsDialog(false)}>Cancel</Button>
+                        <Button onClick={handleSettingsSubmit} variant="contained" color="primary">
+                            Confirm
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Project name */}
                 <Typography variant="h4" color="primary" fontWeight="bold" sx={{ ml: 4 }}>
                     {project ? project.name : "Loading Project..."}
                 </Typography>
-                <Button
-                    variant="contained"
-                    color="secondary"
-                    onClick={logoutUser}
-                    sx={{ ml: "auto", mr: 2 }}
-                >
-                    Logout
-                </Button>
+
+                {/* New 'Back' button to go to root */}
+                <Box sx={{ display: "flex", ml: "auto" }}>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={handleBackToRoot}
+                        sx={{ mr: 2 }}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={logoutUser}
+                        sx={{ mr: 2 }}
+                    >
+                        Logout
+                    </Button>
+                </Box>
             </Box>
             {loading && <LinearProgress />}
             {images.length > 0 ? (
@@ -468,7 +534,8 @@ function ProjectDetailPage() {
                                 overflow="auto"
                             >
                                 <Box flexGrow={1} display="flex" overflow="hidden">
-                                    {(modelType === "segmentation" || modelType === "video_tracking_segmentation") ? (
+                                    {(modelType === "segmentation" ||
+                                        modelType === "video_tracking_segmentation") ? (
                                         <ImageDisplaySegmentation
                                             image={images[currentIndex]}
                                             previousMask={masks[images[currentIndex].id]}
