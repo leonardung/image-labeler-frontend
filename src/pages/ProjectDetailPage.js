@@ -22,7 +22,6 @@ function ProjectDetailPage() {
     const [images, setImages] = useState([]);
     const [coordinates, setCoordinates] = useState({});
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [files, setFiles] = useState([]);
     const [progress, setProgress] = useState(0);
     const [masks, setMasks] = useState({});
     const [loading, setLoading] = useState(false);
@@ -85,61 +84,104 @@ function ProjectDetailPage() {
 
     // Function to select and upload images
     const handleSelectFolder = async () => {
+        // Create a file input dynamically
         const input = document.createElement("input");
         input.type = "file";
-        input.multiple = true;
-        input.accept = modelType === "video_tracking_segmentation" ? "video/*" : "image/*";
+      
+        // Decide multiple vs. single and accept type based on model
+        if (modelType === "video_tracking_segmentation") {
+          input.multiple = false;     // Only one file (video)
+          input.accept = "video/*";
+        } else {
+          input.multiple = true;      // Multiple image files
+          input.accept = "image/*";
+        }
+      
         input.onchange = async (event) => {
-            const selectedFiles = Array.from(event.target.files);
-            const filteredFiles = selectedFiles.filter((file) =>
-                modelType === "video_tracking_segmentation" 
-                    ? file.type.startsWith("video/")
-                    : file.type.startsWith("image/")
-            );
-            setFiles(filteredFiles);
-            setCurrentIndex(0);
-            setCoordinates({});
-
-            // Batch upload files
-            const batchSize = 50; // Adjust based on your needs and server capacity
-            setLoading(true);
-            for (let i = 0; i < filteredFiles.length; i += batchSize) {
-                const batchFiles = filteredFiles.slice(i, i + batchSize);
-
-                // Create FormData for the batch
-                const formData = new FormData();
-                formData.append("project_id", projectId);
-                batchFiles.forEach((file) => {
-                    formData.append("images", file);
-                });
-
-                // Upload the batch
-                try {
-                    const response = await axiosInstance.post(
-                        `images/`,
-                        formData,
-                        {
-                            headers: {
-                                "Content-Type": "multipart/form-data",
-                            },
-                        }
-                    );
-                    if (response.data) {
-                        setImages((prevImages) => [...prevImages, ...response.data]);
-                    }
-                } catch (error) {
-                    console.error("Error uploading batch: ", error);
-                    setNotification({
-                        open: true,
-                        message: "Error uploading batch",
-                        severity: "error",
-                    });
-                }
+          // Update your local state
+          setCurrentIndex(0);
+          setCoordinates({});
+          setLoading(true);
+      
+          // -----------------------------
+          // 1) Handle the single VIDEO case
+          // -----------------------------
+          if (modelType === "video_tracking_segmentation" && filteredFiles.length > 0) {
+            const formData = new FormData();
+            formData.append("project_id", projectId);
+      
+            // Only a single video allowed, so take the first one
+            formData.append("video", filteredFiles[0]);
+      
+            try {
+              const response = await axiosInstance.post(`video/`, formData, {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                },
+              });
+      
+              if (response.data) {
+                // Backend will likely return an array of frame images
+                setImages((prevImages) => [...prevImages, ...response.data]);
+              }
+            } catch (error) {
+              console.error("Error uploading video: ", error);
+              setNotification({
+                open: true,
+                message: "Error uploading video",
+                severity: "error",
+              });
+            } finally {
+              setLoading(false);
             }
-            setLoading(false);
+      
+            // Stop here, since we only handle a single video
+            return;
+          }
+      
+          // -----------------------------
+          // 2) Handle multiple IMAGE files
+          // -----------------------------
+          const batchSize = 50; // Adjust to your server’s capacity
+          for (let i = 0; i < filteredFiles.length; i += batchSize) {
+            const batchFiles = filteredFiles.slice(i, i + batchSize);
+      
+            // Prepare form data for each batch
+            const formData = new FormData();
+            formData.append("project_id", projectId);
+      
+            batchFiles.forEach((file) => {
+              formData.append("images", file);
+            });
+      
+            // Upload each batch
+            try {
+              const response = await axiosInstance.post(`images/`, formData, {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                },
+              });
+      
+              if (response.data) {
+                setImages((prevImages) => [...prevImages, ...response.data]);
+              }
+            } catch (error) {
+              console.error("Error uploading batch: ", error);
+              setNotification({
+                open: true,
+                message: "Error uploading batch",
+                severity: "error",
+              });
+            }
+          }
+      
+          setLoading(false);
         };
+      
+        // Programmatically trigger the file input
         input.click();
-    };
+      };
+      
 
     // Navigation functions
     const handleNextImage = () => {
@@ -397,7 +439,6 @@ function ProjectDetailPage() {
                             onThumbnailClick={handleThumbnailClick}
                             currentIndex={currentIndex}
                             coordinates={coordinates}
-                            files={files}
                         />
                     </Box>
                     <Box

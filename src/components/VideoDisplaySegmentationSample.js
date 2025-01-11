@@ -1,49 +1,42 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Box, Typography } from "@mui/material";
-import Slider from "rc-slider";
-import "rc-slider/assets/index.css";  // IMPORTANT: import rc-slider's CSS
+import { Button, Box, Typography, Slider } from "@mui/material";
 
-const FPS = 24.001676; // Adjust this to match your video frame rate
+const FPS = 24.001676; // Adjust to match your video frame rate
+// const FPS = 50.004028; // Adjust to match your video frame rate
 
 const VideoDisplaySegmentation = () => {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
 
-  // We’ll track both the current frame and the total duration in seconds.
   const [currentFrame, setCurrentFrame] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);    // in seconds
-  const [currentTime, setCurrentTime] = useState(0); // in seconds
 
   const video_url = "http://media.w3.org/2010/05/bunny/movie.mp4";
+  // const video_url = "http://localhost:8000/media/images/RS_Buffert_Br%C3%A4d_2024-11-13_11_32_37_498_u5sDlvw.mp4";
 
-  // ─────────────────────────────────────────────────────────
-  // This handles jumping to a specific frame (frame-based).
-  // ─────────────────────────────────────────────────────────
   const handleFrameChange = (newFrame) => {
     if (!videoRef.current) return;
-    const safeFrame = Math.max(newFrame, 0);
 
-    // Pause if currently playing, so the seek is stable
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
     }
-
-    // Convert frame to time: time = frame / FPS
+    console.log("currentFrame", currentFrame)
+    console.log("currentTime", currentTime)
+    const safeFrame = Math.max(newFrame, 0);
     const newTime = safeFrame / FPS;
-
-    // Seek video
     videoRef.current.currentTime = newTime;
-
-    // Update state
+    console.log("safeFrame", safeFrame)
+    console.log("FPS", FPS)
+    console.log("newTime", newTime)
     setCurrentFrame(safeFrame);
     setCurrentTime(newTime);
+    console.log("currentFrame", currentFrame)
+    console.log("currentTime", currentTime)
+    console.log("111111111111111")
   };
-
-  // ─────────────────────────────────────────────────────────
-  // Toggle Play/Pause
-  // ─────────────────────────────────────────────────────────
   const togglePlayPause = () => {
     if (!videoRef.current) return;
 
@@ -56,22 +49,20 @@ const VideoDisplaySegmentation = () => {
   };
 
   // ─────────────────────────────────────────────────────────
-  // Keep track of:
-  //   - total duration (on 'loadedmetadata')
-  //   - current time (on 'timeupdate')
+  // Get video duration (once) and track currentTime.
   // ─────────────────────────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleLoadedMetadata = () => {
-      setDuration(video.duration); // in seconds
+      setDuration(video.duration); // total duration in seconds
     };
 
     const handleTimeUpdate = () => {
       const newTime = video.currentTime; // in seconds
       setCurrentTime(newTime);
-      // Also update frame count if needed
+      // Calculate frame from current time
       setCurrentFrame(Math.floor(newTime * FPS));
     };
 
@@ -85,24 +76,23 @@ const VideoDisplaySegmentation = () => {
   }, []);
 
   // ─────────────────────────────────────────────────────────
-  // Handle direct slider changes in seconds
+  // Slider: onChange => update local time while dragging and seek video once user stops
   // ─────────────────────────────────────────────────────────
-  const onSliderChange = (newSeconds) => {
-    // We'll pause if playing
+  const handleSliderChange = (event, newValue) => {
+    // We'll pause if playing while dragging
     if (isPlaying && videoRef.current) {
       videoRef.current.pause();
       setIsPlaying(false);
     }
-    setCurrentTime(newSeconds);
+
+    setCurrentTime(newValue);
+    if (videoRef.current) {
+      videoRef.current.currentTime = newValue;
+    }
+    // Update frame count
+    setCurrentFrame(Math.floor(newValue * FPS));
   };
 
-  const onSliderAfterChange = (newSeconds) => {
-    // Actually seek the video
-    if (videoRef.current) {
-      videoRef.current.currentTime = newSeconds;
-    }
-    setCurrentFrame(Math.floor(newSeconds * FPS));
-  };
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -120,7 +110,7 @@ const VideoDisplaySegmentation = () => {
         }}
       >
         <Button variant="contained" onClick={togglePlayPause}>
-          {isPlaying ? 'Pause' : 'Play'}
+          {isPlaying ? "Pause" : "Play"}
         </Button>
 
         <Button
@@ -143,7 +133,7 @@ const VideoDisplaySegmentation = () => {
         sx={{
           position: "absolute",
           bottom: 20,
-          width: "60%",
+          width: "80%",
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 2,
@@ -151,33 +141,24 @@ const VideoDisplaySegmentation = () => {
       >
         <Slider
           min={0}
-          max={duration}          // total duration in seconds
-          value={currentTime}     // current time in seconds
-          onChange={onSliderChange}
-          onAfterChange={onSliderAfterChange}
-          railStyle={{ backgroundColor: '#ccc', height: 6 }}
-          trackStyle={{ backgroundColor: '#1976d2', height: 6 }}
-          handleStyle={{
-            borderColor: '#1976d2',
-            height: 20,
-            width: 20,
-            marginLeft: -10,
-            marginTop: -7,
-            backgroundColor: '#fff',
-          }}
+          max={duration}
+          step={0.01}
+          value={currentTime}
+          onChange={handleSliderChange}
+          aria-labelledby="video-progress-slider"
         />
       </Box>
 
-      {/* Current Frame Display (optional) */}
+      {/* Current Frame & Time Display (Optional) */}
       <Box
         sx={{
           position: "absolute",
           top: 20,
           left: 20,
           zIndex: 2,
-          background: "rgba(0,0,0,0.5)",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
           color: "#fff",
-          padding: "4px 8px",
+          padding: "8px 12px",
           borderRadius: "4px",
         }}
       >
@@ -206,8 +187,8 @@ const VideoDisplaySegmentation = () => {
             position: "absolute",
             top: 0,
             left: 0,
-            width: "100%",    // ensure video fills container
-            // height: "auto",   // maintain aspect ratio
+            width: "100%",
+            height: "auto", // maintain aspect ratio
           }}
         />
       </div>

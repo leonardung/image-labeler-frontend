@@ -22,7 +22,7 @@ const StyledGrid = styled(FixedSizeGrid)(({ theme }) => ({
   },
 }));
 
-function ThumbnailGrid({ images, onThumbnailClick, currentIndex, coordinates, files }) {
+function ThumbnailGrid({ images, onThumbnailClick, currentIndex, coordinates }) {
   const gridRef = useRef(null);
   const columnCount = 4;
   const rowCount = Math.ceil(images.length / columnCount);
