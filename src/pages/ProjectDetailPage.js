@@ -284,7 +284,47 @@ function ProjectDetailPage() {
         a.click();
     };
 
+    const handlePropagateMask = async () => {
+        if (!projectId) {
+            setNotification({
+                open: true,
+                message: "Project ID is missing.",
+                severity: "warning",
+            });
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const response = await axiosInstance.post(`images/propagate_mask/`, {
+                project_id: projectId
+            });
+
+            if (response.data) {
+                setNotification({
+                    open: true,
+                    message: "Mask propagation completed successfully.",
+                    severity: "success",
+                });
+            }
+        } catch (error) {
+            console.error("Error propagating mask:", error);
+            setNotification({
+                open: true,
+                message: "Error propagating mask.",
+                severity: "error",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleUseModel = () => {
+        if (modelType === "video_tracking_segmentation") {
+            handlePropagateMask();
+            return;
+        }
+
         if (!projectId) {
             setNotification({
                 open: true,

@@ -195,10 +195,13 @@ const ImageDisplaySegmentation = ({
     });
   };
 
-  
-
-  // Function to clear points
-  const clearPoints = () => {
+  // Function to clear points and unload model
+  const clearPoints = async () => {
+    try {
+      await axiosInstance.get(`images/unload_model/`);
+    } catch (error) {
+      console.error('Error unloading model:', error);
+    }
     setPoints([]);
     setMask(null);
   };
