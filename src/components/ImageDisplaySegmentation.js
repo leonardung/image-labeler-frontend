@@ -27,11 +27,13 @@ const ImageDisplaySegmentation = ({
 
   const [points, setPoints] = useState([]);
   const [mask, setMask] = useState(previousMask || null);
-
+  const [maskRefreshTrigger, setMaskRefreshTrigger] = useState(0);
+  const prevImageRef = useRef(image.id);
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    setPoints([]);
+    setPoints(image.coordinates || []);
+    console.log("image.coordinates:", image.coordinates);
     setMask(previousMask || null);
   }, [image]);
 
@@ -41,6 +43,7 @@ const ImageDisplaySegmentation = ({
 
 
   const handleImageClick = (event) => {
+
     event.preventDefault();
     if (isPanning) return;
     if (!containerRef.current || !imageRef.current) return;
@@ -73,6 +76,11 @@ const ImageDisplaySegmentation = ({
       ...prevPoints,
       { x: imgX, y: imgY, include: isInclude },
     ]);
+    // update image.coordinates
+    image.coordinates = [
+      ...points,
+      { x: imgX, y: imgY, include: isInclude },
+    ];
   };
 
   // Prevent default context menu on right-click
@@ -96,14 +104,11 @@ const ImageDisplaySegmentation = ({
           },
         }
       );
-      // Assume the response contains 'mask'
-      const maskData = response.data.mask;
-      setMask(maskData);
+      const maskUrl = `${response.data.mask}?t=${Date.now()}`;
+      image.mask = maskUrl;
 
-      // Call onMaskChange if provided
-      if (onMaskChange) {
-        onMaskChange(maskData);
-      }
+      setMaskRefreshTrigger((prev) => prev + 1);
+
     } catch (error) {
       console.error("Error generating mask:", error);
     }
@@ -111,58 +116,82 @@ const ImageDisplaySegmentation = ({
 
   // Generate mask whenever points change
   useEffect(() => {
-    if (points.length > 0) {
+    if (points.length > 0 && prevImageRef.current == image.id) {
       generateMask();
     }
+    prevImageRef.current = image.id;
   }, [points]);
 
 
   // Draw the mask onto the canvas whenever it changes
   useEffect(() => {
-    if (
-      !mask ||
-      !canvasRef.current ||
-      mask.length === 0 ||
-      !Array.isArray(mask[0]) ||
-      mask[0].length === 0
-    ) {
+    if (!image.mask || !canvasRef.current) {
       return;
     }
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    const maskWidth = mask[0].length;
-    const maskHeight = mask.length;
+    // Create a new Image to load the mask PNG.
+    const maskImg = new Image();
+    // Setting crossOrigin allows reading the image data if your backend supports CORS.
+    maskImg.crossOrigin = "anonymous";
+    maskImg.src = image.mask;
 
-    canvas.width = maskWidth;
-    canvas.height = maskHeight;
+    maskImg.onload = () => {
+      const maskWidth = maskImg.width;
+      const maskHeight = maskImg.height;
 
-    // Scale the canvas to match the image dimensions
-    canvas.style.width = `${imgDimensions.width}px`;
-    canvas.style.height = `${imgDimensions.height}px`;
+      canvas.width = maskWidth;
+      canvas.height = maskHeight;
 
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Scale the canvas to match the image dimensions
+      canvas.style.width = `${imgDimensions.width}px`;
+      canvas.style.height = `${imgDimensions.height}px`;
 
-    // Create ImageData
-    const imageData = ctx.createImageData(canvas.width, canvas.height);
-    const data = imageData.data;
+      // Clear the canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Set pixel data based on the mask
-    for (let y = 0; y < maskHeight; y++) {
-      for (let x = 0; x < maskWidth; x++) {
-        const index = (y * maskWidth + x) * 4;
-        const value = mask[y][x]; // 0 or 1
-        data[index] = 0; // R
-        data[index + 1] = 255; // G
-        data[index + 2] = 0; // B
-        data[index + 3] = value ? 128 : 0; // A (transparency)
+      // Draw the mask image to an offscreen canvas so we can read its pixel data.
+      const offscreenCanvas = document.createElement("canvas");
+      offscreenCanvas.width = maskWidth;
+      offscreenCanvas.height = maskHeight;
+      const offscreenCtx = offscreenCanvas.getContext("2d");
+      offscreenCtx.drawImage(maskImg, 0, 0);
+
+      // Retrieve the pixel data from the offscreen canvas.
+      const imageData = offscreenCtx.getImageData(0, 0, maskWidth, maskHeight);
+      const data = imageData.data;
+
+      // Process each pixel:
+      // For a binary PNG mask, we assume that white pixels (or those above a threshold) indicate the mask region.
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 128) {
+          data[i] = 0;       // Red
+          data[i + 1] = 255; // Green
+          data[i + 2] = 0;   // Blue
+          data[i + 3] = 128; // Alpha (transparency)
+        } else {
+          data[i + 3] = 0;
+        }
       }
-    }
 
-    ctx.putImageData(imageData, 0, 0);
-  }, [mask, imgDimensions]);
+      // Draw the modified mask onto the main canvas.
+      ctx.putImageData(imageData, 0, 0);
+    };
+
+    maskImg.onerror = (error) => {
+      console.warn("Mask image not accessible; displaying empty mask.", error);
+
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.style.width = `${imgDimensions.width}px`;
+      canvas.style.height = `${imgDimensions.height}px`;
+
+      // Clear the canvas (resulting in an empty/transparent mask).
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [image.id, maskRefreshTrigger]);
 
   const renderPoints = () => {
     return points.map((point, index) => {
@@ -201,6 +230,18 @@ const ImageDisplaySegmentation = ({
       await axiosInstance.get(`images/unload_model/`);
     } catch (error) {
       console.error('Error unloading model:', error);
+    }
+    try {
+      await axiosInstance.delete(`images/${image.id}/delete_mask/`);
+      image.mask = null;
+    } catch (error) {
+      console.error('Error deleting masks:', error);
+    }
+    try {
+      await axiosInstance.delete(`images/${image.id}/delete_coordinates/`);
+      image.coordinates = [];
+    } catch (error) {
+      console.error('Error deleting coordinates:', error);
     }
     setPoints([]);
     setMask(null);
@@ -299,7 +340,7 @@ const ImageDisplaySegmentation = ({
         />
 
         {/* Render the mask overlay */}
-        {mask && (
+        {image.mask && (
           <canvas
             ref={canvasRef}
             style={{

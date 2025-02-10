@@ -153,7 +153,7 @@ const useImageDisplay = (imageSrc) => {
   }, [imageSrc, keepZoomPan]);
 
   const handleWheel = (event) => {
-    event.preventDefault(); // Prevent default browser zoom behavior
+    // event.preventDefault(); // Prevent default browser zoom behavior
 
     if (!containerRef.current) return;
 

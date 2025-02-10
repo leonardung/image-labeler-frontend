@@ -306,6 +306,12 @@ function ProjectDetailPage() {
                     message: "Mask propagation completed successfully.",
                     severity: "success",
                 });
+                const updatedImages = response.data.map(image => ({
+                    ...image,
+                    mask: `${image.mask}?t=${Date.now()}`
+                }));
+                setImages(updatedImages);
+
             }
         } catch (error) {
             console.error("Error propagating mask:", error);
